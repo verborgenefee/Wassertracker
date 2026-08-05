@@ -154,6 +154,84 @@
       background: linear-gradient(135deg, rgba(37, 99, 235, 0.92), rgba(56, 189, 248, 0.92));
     }
 
+    .entry-fields {
+      display: grid;
+      gap: 13px;
+    }
+
+    .quick-tabs {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .quick-btn {
+      min-height: 86px;
+      font-size: 20px;
+      border-radius: 18px;
+    }
+
+    .quick-glass {
+      background: linear-gradient(135deg, var(--blue-dark), var(--blue));
+      box-shadow: 0 14px 28px rgba(37, 99, 235, 0.32);
+    }
+
+    .quick-bottle {
+      background: linear-gradient(135deg, #15803d, var(--green));
+      box-shadow: 0 14px 28px rgba(34, 197, 94, 0.28);
+    }
+
+    .custom-amount summary {
+      cursor: pointer;
+      color: var(--muted);
+      font-size: 14px;
+      font-weight: 700;
+      padding: 4px 2px;
+      list-style: none;
+    }
+
+    .custom-amount summary::-webkit-details-marker {
+      display: none;
+    }
+
+    .custom-amount summary::before {
+      content: "\25b8  ";
+    }
+
+    .custom-amount[open] summary::before {
+      content: "\25be  ";
+    }
+
+    .custom-amount form {
+      margin-top: 12px;
+    }
+
+    .toast {
+      position: fixed;
+      left: 50%;
+      bottom: calc(20px + env(safe-area-inset-bottom));
+      transform: translate(-50%, 12px);
+      background: rgba(15, 23, 42, 0.97);
+      border: 1px solid var(--line);
+      color: var(--text);
+      padding: 12px 20px;
+      border-radius: 14px;
+      font-weight: 800;
+      font-size: 14px;
+      box-shadow: var(--shadow);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s ease, transform 0.2s ease;
+      z-index: 50;
+      max-width: calc(100% - 28px);
+      text-align: center;
+    }
+
+    .toast.show {
+      opacity: 1;
+      transform: translate(-50%, 0);
+    }
+
     button {
       width: 100%;
       min-height: 60px;
@@ -366,7 +444,7 @@
 
       <div class="card">
         <h2>Eintragen</h2>
-        <form id="drinkForm">
+        <div class="entry-fields">
           <label>
             Datum
             <input id="dateInput" type="date" required>
@@ -380,19 +458,28 @@
             </div>
           </div>
 
-          <div class="two">
-            <label>
-              Flaschen
-              <input id="bottleInput" type="number" inputmode="decimal" min="0" step="0.5" placeholder="z.B. 1">
-            </label>
-            <label>
-              Gl&auml;ser
-              <input id="glassInput" type="number" inputmode="decimal" min="0" step="0.5" placeholder="z.B. 2">
-            </label>
+          <div class="quick-tabs">
+            <button class="quick-btn quick-glass" id="quickGlassButton" type="button">+ 1 Glas</button>
+            <button class="quick-btn quick-bottle" id="quickBottleButton" type="button">+ 1 Flasche</button>
           </div>
 
-          <button class="save" type="submit">Speichern</button>
-        </form>
+          <details class="custom-amount">
+            <summary>Eigene Menge eintragen</summary>
+            <form id="drinkForm">
+              <div class="two">
+                <label>
+                  Flaschen
+                  <input id="bottleInput" type="number" inputmode="decimal" min="0" step="0.5" placeholder="z.B. 1">
+                </label>
+                <label>
+                  Gl&auml;ser
+                  <input id="glassInput" type="number" inputmode="decimal" min="0" step="0.5" placeholder="z.B. 2">
+                </label>
+              </div>
+              <button class="save" type="submit">Speichern</button>
+            </form>
+          </details>
+        </div>
       </div>
 
       <div class="card">
@@ -479,6 +566,8 @@
     </section>
   </main>
 
+  <div class="toast" id="toastBox"></div>
+
   <script>
     const STORAGE_KEY = "simple_water_tracker_entries_v1";
     const SETTINGS_KEY = "simple_water_tracker_settings_v1";
@@ -495,6 +584,9 @@
     const glassInput = document.getElementById("glassInput");
     const waterButton = document.getElementById("waterButton");
     const coffeeButton = document.getElementById("coffeeButton");
+    const quickGlassButton = document.getElementById("quickGlassButton");
+    const quickBottleButton = document.getElementById("quickBottleButton");
+    const toastBox = document.getElementById("toastBox");
     const entriesEl = document.getElementById("entries");
     const waterTotalEl = document.getElementById("waterTotal");
     const coffeeTotalEl = document.getElementById("coffeeTotal");
@@ -526,40 +618,27 @@
     waterButton.addEventListener("click", () => setDrinkType("water"));
     coffeeButton.addEventListener("click", () => setDrinkType("coffee"));
 
+    quickGlassButton.addEventListener("click", () => {
+      addEntry(0, 1);
+    });
+
+    quickBottleButton.addEventListener("click", () => {
+      addEntry(1, 0);
+    });
+
     form.addEventListener("submit", event => {
       event.preventDefault();
 
-      const date = dateInput.value;
       const bottles = parseAmount(bottleInput.value);
       const glasses = parseAmount(glassInput.value);
-
-      if (!date) {
-        alert("Bitte Datum ausfuellen.");
-        return;
-      }
 
       if (bottles <= 0 && glasses <= 0) {
         alert("Bitte mindestens eine Flasche oder ein Glas eintragen.");
         return;
       }
 
-      entries.push({
-        id: createId(),
-        date,
-        createdISO: new Date().toISOString(),
-        type: drinkType,
-        bottles,
-        glasses,
-        bottleLiters: settings.bottleLiters,
-        glassLiters: settings.glassLiters
-      });
-
-      saveEntries();
+      addEntry(bottles, glasses);
       form.reset();
-      dateInput.value = toDateValue(new Date());
-      setDrinkType(drinkType);
-      hideReminder();
-      render();
     });
 
     reminderInterval.addEventListener("change", () => {
@@ -602,6 +681,38 @@
       drinkType = type;
       waterButton.classList.toggle("active", type === "water");
       coffeeButton.classList.toggle("active", type === "coffee");
+    }
+
+    function addEntry(bottles, glasses) {
+      const date = dateInput.value || toDateValue(new Date());
+
+      entries.push({
+        id: createId(),
+        date,
+        createdISO: new Date().toISOString(),
+        type: drinkType,
+        bottles,
+        glasses,
+        bottleLiters: settings.bottleLiters,
+        glassLiters: settings.glassLiters
+      });
+
+      saveEntries();
+      hideReminder();
+      render();
+
+      const drinkLabel = drinkType === "water" ? "Wasser" : "Kaffee";
+      const amountLabel = bottles > 0 ? "Flasche" : "Glas";
+      showToast(amountLabel + " " + drinkLabel + " eingetragen");
+    }
+
+    let toastTimer = null;
+
+    function showToast(text) {
+      toastBox.textContent = text;
+      toastBox.classList.add("show");
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => toastBox.classList.remove("show"), 1400);
     }
 
     function render() {
