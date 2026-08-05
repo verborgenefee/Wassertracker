@@ -293,6 +293,14 @@
       overflow-wrap: anywhere;
     }
 
+    .sublabel {
+      margin-top: 4px;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+    }
+
     .progress-wrap {
       margin-top: 14px;
       display: grid;
@@ -486,20 +494,24 @@
         <h2>Heute</h2>
         <div class="stats">
           <div class="stat">
-            <div class="label">Wasser ca.</div>
-            <div class="value" id="waterTotal">0,0 l</div>
+            <div class="label">Wasser - Flaschen</div>
+            <div class="value" id="waterBottleTotal">0</div>
+            <div class="sublabel" id="waterBottleLiters">&asymp; 0,0 l</div>
           </div>
           <div class="stat">
-            <div class="label">Kaffee ca.</div>
-            <div class="value" id="coffeeTotal">0,0 l</div>
+            <div class="label">Wasser - Gl&auml;ser</div>
+            <div class="value" id="waterGlassTotal">0</div>
+            <div class="sublabel" id="waterGlassLiters">&asymp; 0,0 l</div>
           </div>
           <div class="stat">
-            <div class="label">Flasche Nr.</div>
-            <div class="value" id="bottleTotal">0</div>
+            <div class="label">Kaffee - Flaschen</div>
+            <div class="value" id="coffeeBottleTotal">0</div>
+            <div class="sublabel" id="coffeeBottleLiters">&asymp; 0,0 l</div>
           </div>
           <div class="stat">
-            <div class="label">Glas Nr.</div>
-            <div class="value" id="glassTotal">0</div>
+            <div class="label">Kaffee - Gl&auml;ser</div>
+            <div class="value" id="coffeeGlassTotal">0</div>
+            <div class="sublabel" id="coffeeGlassLiters">&asymp; 0,0 l</div>
           </div>
         </div>
 
@@ -588,10 +600,14 @@
     const quickBottleButton = document.getElementById("quickBottleButton");
     const toastBox = document.getElementById("toastBox");
     const entriesEl = document.getElementById("entries");
-    const waterTotalEl = document.getElementById("waterTotal");
-    const coffeeTotalEl = document.getElementById("coffeeTotal");
-    const bottleTotalEl = document.getElementById("bottleTotal");
-    const glassTotalEl = document.getElementById("glassTotal");
+    const waterBottleTotalEl = document.getElementById("waterBottleTotal");
+    const waterBottleLitersEl = document.getElementById("waterBottleLiters");
+    const waterGlassTotalEl = document.getElementById("waterGlassTotal");
+    const waterGlassLitersEl = document.getElementById("waterGlassLiters");
+    const coffeeBottleTotalEl = document.getElementById("coffeeBottleTotal");
+    const coffeeBottleLitersEl = document.getElementById("coffeeBottleLiters");
+    const coffeeGlassTotalEl = document.getElementById("coffeeGlassTotal");
+    const coffeeGlassLitersEl = document.getElementById("coffeeGlassLiters");
     const dayNameEl = document.getElementById("dayName");
     const reminderBox = document.getElementById("reminderBox");
     const reminderInterval = document.getElementById("reminderInterval");
@@ -726,18 +742,38 @@
       const waterEntries = todaysEntries.filter(entry => entry.type === "water");
       const coffeeEntries = todaysEntries.filter(entry => entry.type === "coffee");
 
-      const waterLiters = totalLiters(waterEntries);
-      const coffeeLiters = totalLiters(coffeeEntries);
-      const bottles = todaysEntries.reduce((sum, entry) => sum + entry.bottles, 0);
-      const glasses = todaysEntries.reduce((sum, entry) => sum + entry.glasses, 0);
-      const goalPercent = Math.min(100, Math.round((waterLiters / settings.dailyGoal) * 100));
+      setContainerStat(waterBottleTotalEl, waterBottleLitersEl, sumBottles(waterEntries), sumBottleLiters(waterEntries));
+      setContainerStat(waterGlassTotalEl, waterGlassLitersEl, sumGlasses(waterEntries), sumGlassLiters(waterEntries));
+      setContainerStat(coffeeBottleTotalEl, coffeeBottleLitersEl, sumBottles(coffeeEntries), sumBottleLiters(coffeeEntries));
+      setContainerStat(coffeeGlassTotalEl, coffeeGlassLitersEl, sumGlasses(coffeeEntries), sumGlassLiters(coffeeEntries));
 
-      waterTotalEl.textContent = formatLiters(waterLiters);
-      coffeeTotalEl.textContent = formatLiters(coffeeLiters);
-      bottleTotalEl.textContent = formatAmount(bottles);
-      glassTotalEl.textContent = formatAmount(glasses);
+      // Fuer den Fortschrittsbalken zaehlt die Gesamtmenge Wasser weiterhin intern,
+      // Flaschen und Glaeser werden dabei aber nirgendwo als eine gemeinsame Kachel angezeigt.
+      const waterLiters = totalLiters(waterEntries);
+      const goalPercent = Math.min(100, Math.round((waterLiters / settings.dailyGoal) * 100));
       goalText.textContent = goalPercent + "%";
       progressBar.style.width = goalPercent + "%";
+    }
+
+    function setContainerStat(totalEl, litersEl, count, liters) {
+      totalEl.textContent = formatAmount(count);
+      litersEl.textContent = "≈ " + formatLiters(liters);
+    }
+
+    function sumBottles(items) {
+      return items.reduce((sum, entry) => sum + entry.bottles, 0);
+    }
+
+    function sumGlasses(items) {
+      return items.reduce((sum, entry) => sum + entry.glasses, 0);
+    }
+
+    function sumBottleLiters(items) {
+      return items.reduce((sum, entry) => sum + entry.bottles * (entry.bottleLiters ?? settings.bottleLiters), 0);
+    }
+
+    function sumGlassLiters(items) {
+      return items.reduce((sum, entry) => sum + entry.glasses * (entry.glassLiters ?? settings.glassLiters), 0);
     }
 
     function renderEntries() {
@@ -765,7 +801,7 @@
 
         const info = document.createElement("div");
         info.className = "entry-info";
-        info.textContent = formatAmount(entry.bottles) + " Flaschen - " + formatAmount(entry.glasses) + " Glaeser";
+        info.textContent = formatEntryInfo(entry);
 
         const amount = document.createElement("div");
         amount.className = entry.type === "water" ? "entry-water" : "entry-coffee";
@@ -785,6 +821,20 @@
         item.appendChild(deleteButton);
         entriesEl.appendChild(item);
       });
+    }
+
+    function formatEntryInfo(entry) {
+      const parts = [];
+
+      if (entry.bottles > 0) {
+        parts.push(formatAmount(entry.bottles) + (entry.bottles === 1 ? " Flasche" : " Flaschen"));
+      }
+
+      if (entry.glasses > 0) {
+        parts.push(formatAmount(entry.glasses) + (entry.glasses === 1 ? " Glas" : " Glaeser"));
+      }
+
+      return parts.length ? parts.join(" + ") : "0 Flaschen";
     }
 
     function deleteEntry(id) {
