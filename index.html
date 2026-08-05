@@ -517,11 +517,20 @@
 
         <div class="progress-wrap">
           <div class="progress-meta">
-            <span>Wasserziel ca.</span>
-            <span id="goalText">0%</span>
+            <span>Flaschenziel</span>
+            <span id="bottleGoalText">0 / 0</span>
           </div>
           <div class="progress" aria-hidden="true">
-            <div class="progress-bar" id="progressBar"></div>
+            <div class="progress-bar" id="bottleProgressBar"></div>
+          </div>
+        </div>
+        <div class="progress-wrap">
+          <div class="progress-meta">
+            <span>Glasziel</span>
+            <span id="glassGoalText">0 / 0</span>
+          </div>
+          <div class="progress" aria-hidden="true">
+            <div class="progress-bar" id="glassProgressBar"></div>
           </div>
         </div>
       </div>
@@ -539,14 +548,15 @@
               <option value="120">Alle 2 Stunden</option>
             </select>
           </label>
+        </div>
+        <div class="two">
           <label>
-            Wasserziel ca.
-            <select id="dailyGoal">
-              <option value="1.5">1,5 l</option>
-              <option value="2">2,0 l</option>
-              <option value="2.5">2,5 l</option>
-              <option value="3">3,0 l</option>
-            </select>
+            Flaschenziel pro Tag
+            <input id="bottleGoalInput" type="number" inputmode="numeric" min="1" step="1" placeholder="z.B. 2">
+          </label>
+          <label>
+            Glasziel pro Tag
+            <input id="glassGoalInput" type="number" inputmode="numeric" min="1" step="1" placeholder="z.B. 6">
           </label>
         </div>
         <div class="two">
@@ -611,11 +621,14 @@
     const dayNameEl = document.getElementById("dayName");
     const reminderBox = document.getElementById("reminderBox");
     const reminderInterval = document.getElementById("reminderInterval");
-    const dailyGoal = document.getElementById("dailyGoal");
+    const bottleGoalInput = document.getElementById("bottleGoalInput");
+    const glassGoalInput = document.getElementById("glassGoalInput");
     const bottleSizeInput = document.getElementById("bottleSizeInput");
     const glassSizeInput = document.getElementById("glassSizeInput");
-    const goalText = document.getElementById("goalText");
-    const progressBar = document.getElementById("progressBar");
+    const bottleGoalText = document.getElementById("bottleGoalText");
+    const bottleProgressBar = document.getElementById("bottleProgressBar");
+    const glassGoalText = document.getElementById("glassGoalText");
+    const glassProgressBar = document.getElementById("glassProgressBar");
 
     const dateFormatter = new Intl.DateTimeFormat("de-DE", {
       weekday: "long",
@@ -627,7 +640,8 @@
     dateInput.value = toDateValue(new Date());
     dayNameEl.textContent = dateFormatter.format(new Date());
     reminderInterval.value = String(settings.reminderMinutes);
-    dailyGoal.value = String(settings.dailyGoal);
+    bottleGoalInput.value = String(settings.bottleGoal);
+    glassGoalInput.value = String(settings.glassGoal);
     bottleSizeInput.value = formatInputNumber(settings.bottleLiters);
     glassSizeInput.value = formatInputNumber(settings.glassLiters);
 
@@ -663,8 +677,16 @@
       startReminderTimer();
     });
 
-    dailyGoal.addEventListener("change", () => {
-      settings.dailyGoal = Number(dailyGoal.value);
+    bottleGoalInput.addEventListener("change", () => {
+      settings.bottleGoal = parseGoalAmount(bottleGoalInput.value, 2);
+      bottleGoalInput.value = String(settings.bottleGoal);
+      saveSettings();
+      render();
+    });
+
+    glassGoalInput.addEventListener("change", () => {
+      settings.glassGoal = parseGoalAmount(glassGoalInput.value, 6);
+      glassGoalInput.value = String(settings.glassGoal);
       saveSettings();
       render();
     });
@@ -742,17 +764,25 @@
       const waterEntries = todaysEntries.filter(entry => entry.type === "water");
       const coffeeEntries = todaysEntries.filter(entry => entry.type === "coffee");
 
-      setContainerStat(waterBottleTotalEl, waterBottleLitersEl, sumBottles(waterEntries), sumBottleLiters(waterEntries));
-      setContainerStat(waterGlassTotalEl, waterGlassLitersEl, sumGlasses(waterEntries), sumGlassLiters(waterEntries));
+      const waterBottles = sumBottles(waterEntries);
+      const waterGlasses = sumGlasses(waterEntries);
+
+      setContainerStat(waterBottleTotalEl, waterBottleLitersEl, waterBottles, sumBottleLiters(waterEntries));
+      setContainerStat(waterGlassTotalEl, waterGlassLitersEl, waterGlasses, sumGlassLiters(waterEntries));
       setContainerStat(coffeeBottleTotalEl, coffeeBottleLitersEl, sumBottles(coffeeEntries), sumBottleLiters(coffeeEntries));
       setContainerStat(coffeeGlassTotalEl, coffeeGlassLitersEl, sumGlasses(coffeeEntries), sumGlassLiters(coffeeEntries));
 
-      // Fuer den Fortschrittsbalken zaehlt die Gesamtmenge Wasser weiterhin intern,
-      // Flaschen und Glaeser werden dabei aber nirgendwo als eine gemeinsame Kachel angezeigt.
-      const waterLiters = totalLiters(waterEntries);
-      const goalPercent = Math.min(100, Math.round((waterLiters / settings.dailyGoal) * 100));
-      goalText.textContent = goalPercent + "%";
-      progressBar.style.width = goalPercent + "%";
+      // Flaschenziel und Glasziel sind zwei komplett getrennte Ziele auf Basis von
+      // Wasser-Anzahlen. Es findet an keiner Stelle eine Umrechnung/Addition zwischen
+      // Flaschen und Glaesern statt.
+      renderGoal(bottleGoalText, bottleProgressBar, waterBottles, settings.bottleGoal);
+      renderGoal(glassGoalText, glassProgressBar, waterGlasses, settings.glassGoal);
+    }
+
+    function renderGoal(textEl, barEl, count, goal) {
+      const percent = goal > 0 ? Math.min(100, Math.round((count / goal) * 100)) : 0;
+      textEl.textContent = formatAmount(count) + " / " + formatAmount(goal);
+      barEl.style.width = percent + "%";
     }
 
     function setContainerStat(totalEl, litersEl, count, liters) {
@@ -942,11 +972,12 @@
     }
 
     function loadSettings() {
+      const defaults = { reminderMinutes: 60, bottleGoal: 2, glassGoal: 6, bottleLiters: 0.6, glassLiters: 0.2 };
       try {
         const saved = localStorage.getItem(SETTINGS_KEY);
-        return Object.assign({ reminderMinutes: 60, dailyGoal: 2, bottleLiters: 0.6, glassLiters: 0.2 }, saved ? JSON.parse(saved) : {});
+        return Object.assign({}, defaults, saved ? JSON.parse(saved) : {});
       } catch {
-        return { reminderMinutes: 60, dailyGoal: 2, bottleLiters: 0.6, glassLiters: 0.2 };
+        return defaults;
       }
     }
 
@@ -958,10 +989,6 @@
       const bottleLiters = entry.bottleLiters ?? settings.bottleLiters;
       const glassLiters = entry.glassLiters ?? settings.glassLiters;
       return entry.bottles * bottleLiters + entry.glasses * glassLiters;
-    }
-
-    function totalLiters(items) {
-      return items.reduce((sum, entry) => sum + entryLiters(entry), 0);
     }
 
     function toDateValue(date) {
@@ -998,6 +1025,11 @@
 
     function parseSettingAmount(value, fallback) {
       const parsed = Number(String(value || "").replace(",", "."));
+      return parsed > 0 ? parsed : fallback;
+    }
+
+    function parseGoalAmount(value, fallback) {
+      const parsed = Math.round(Number(String(value || "").replace(",", ".")));
       return parsed > 0 ? parsed : fallback;
     }
 
