@@ -399,26 +399,26 @@
         <h2>Heute</h2>
         <div class="stats">
           <div class="stat">
-            <div class="label">Wasser</div>
+            <div class="label">Wasser ca.</div>
             <div class="value" id="waterTotal">0,0 l</div>
           </div>
           <div class="stat">
-            <div class="label">Kaffee</div>
+            <div class="label">Kaffee ca.</div>
             <div class="value" id="coffeeTotal">0,0 l</div>
           </div>
           <div class="stat">
-            <div class="label">Flaschen</div>
+            <div class="label">Flasche Nr.</div>
             <div class="value" id="bottleTotal">0</div>
           </div>
           <div class="stat">
-            <div class="label">Gl&auml;ser</div>
+            <div class="label">Glas Nr.</div>
             <div class="value" id="glassTotal">0</div>
           </div>
         </div>
 
         <div class="progress-wrap">
           <div class="progress-meta">
-            <span>Tagesziel Wasser</span>
+            <span>Wasserziel ca.</span>
             <span id="goalText">0%</span>
           </div>
           <div class="progress" aria-hidden="true">
@@ -441,13 +441,23 @@
             </select>
           </label>
           <label>
-            Wasserziel
+            Wasserziel ca.
             <select id="dailyGoal">
               <option value="1.5">1,5 l</option>
               <option value="2">2,0 l</option>
               <option value="2.5">2,5 l</option>
               <option value="3">3,0 l</option>
             </select>
+          </label>
+        </div>
+        <div class="two">
+          <label>
+            Flasche in Litern
+            <input id="bottleSizeInput" type="number" inputmode="decimal" min="0.1" step="0.05" placeholder="0,6">
+          </label>
+          <label>
+            Glas in Litern
+            <input id="glassSizeInput" type="number" inputmode="decimal" min="0.05" step="0.05" placeholder="0,2">
           </label>
         </div>
         <button class="secondary" id="notifyButton" type="button">Benachrichtigung erlauben</button>
@@ -472,8 +482,6 @@
   <script>
     const STORAGE_KEY = "simple_water_tracker_entries_v1";
     const SETTINGS_KEY = "simple_water_tracker_settings_v1";
-    const BOTTLE_LITERS = 0.5;
-    const GLASS_LITERS = 0.25;
 
     let entries = loadEntries();
     let settings = loadSettings();
@@ -496,6 +504,8 @@
     const reminderBox = document.getElementById("reminderBox");
     const reminderInterval = document.getElementById("reminderInterval");
     const dailyGoal = document.getElementById("dailyGoal");
+    const bottleSizeInput = document.getElementById("bottleSizeInput");
+    const glassSizeInput = document.getElementById("glassSizeInput");
     const goalText = document.getElementById("goalText");
     const progressBar = document.getElementById("progressBar");
 
@@ -510,6 +520,8 @@
     dayNameEl.textContent = dateFormatter.format(new Date());
     reminderInterval.value = String(settings.reminderMinutes);
     dailyGoal.value = String(settings.dailyGoal);
+    bottleSizeInput.value = formatInputNumber(settings.bottleLiters);
+    glassSizeInput.value = formatInputNumber(settings.glassLiters);
 
     waterButton.addEventListener("click", () => setDrinkType("water"));
     coffeeButton.addEventListener("click", () => setDrinkType("coffee"));
@@ -537,7 +549,9 @@
         createdISO: new Date().toISOString(),
         type: drinkType,
         bottles,
-        glasses
+        glasses,
+        bottleLiters: settings.bottleLiters,
+        glassLiters: settings.glassLiters
       });
 
       saveEntries();
@@ -556,6 +570,20 @@
 
     dailyGoal.addEventListener("change", () => {
       settings.dailyGoal = Number(dailyGoal.value);
+      saveSettings();
+      render();
+    });
+
+    bottleSizeInput.addEventListener("change", () => {
+      settings.bottleLiters = parseSettingAmount(bottleSizeInput.value, 0.6);
+      bottleSizeInput.value = formatInputNumber(settings.bottleLiters);
+      saveSettings();
+      render();
+    });
+
+    glassSizeInput.addEventListener("change", () => {
+      settings.glassLiters = parseSettingAmount(glassSizeInput.value, 0.2);
+      glassSizeInput.value = formatInputNumber(settings.glassLiters);
       saveSettings();
       render();
     });
@@ -711,7 +739,7 @@
         return;
       }
 
-      const header = ["Datum", "Getraenk", "Flaschen", "Glaeser", "Liter"];
+      const header = ["Datum", "Getraenk", "Flaschen", "Glaeser", "Flasche Liter", "Glas Liter", "Liter ca."];
       const rows = [...entries]
         .sort((a, b) => a.date.localeCompare(b.date))
         .map(entry => [
@@ -719,6 +747,8 @@
           entry.type === "water" ? "Wasser" : "Kaffee",
           String(entry.bottles).replace(".", ","),
           String(entry.glasses).replace(".", ","),
+          String(entry.bottleLiters ?? settings.bottleLiters).replace(".", ","),
+          String(entry.glassLiters ?? settings.glassLiters).replace(".", ","),
           entryLiters(entry).toFixed(2).replace(".", ",")
         ]);
 
@@ -753,9 +783,9 @@
     function loadSettings() {
       try {
         const saved = localStorage.getItem(SETTINGS_KEY);
-        return Object.assign({ reminderMinutes: 60, dailyGoal: 2 }, saved ? JSON.parse(saved) : {});
+        return Object.assign({ reminderMinutes: 60, dailyGoal: 2, bottleLiters: 0.6, glassLiters: 0.2 }, saved ? JSON.parse(saved) : {});
       } catch {
-        return { reminderMinutes: 60, dailyGoal: 2 };
+        return { reminderMinutes: 60, dailyGoal: 2, bottleLiters: 0.6, glassLiters: 0.2 };
       }
     }
 
@@ -764,7 +794,9 @@
     }
 
     function entryLiters(entry) {
-      return entry.bottles * BOTTLE_LITERS + entry.glasses * GLASS_LITERS;
+      const bottleLiters = entry.bottleLiters ?? settings.bottleLiters;
+      const glassLiters = entry.glassLiters ?? settings.glassLiters;
+      return entry.bottles * bottleLiters + entry.glasses * glassLiters;
     }
 
     function totalLiters(items) {
@@ -795,8 +827,17 @@
       });
     }
 
+    function formatInputNumber(value) {
+      return String(value).replace(".", ",");
+    }
+
     function parseAmount(value) {
       return Math.max(0, Number(String(value || "0").replace(",", ".")) || 0);
+    }
+
+    function parseSettingAmount(value, fallback) {
+      const parsed = Number(String(value || "").replace(",", "."));
+      return parsed > 0 ? parsed : fallback;
     }
 
     function csvCell(value) {
@@ -813,6 +854,10 @@
   </script>
 </body>
 </html>
+
+
+
+
 
 
 
