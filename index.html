@@ -347,6 +347,22 @@
       display: block;
     }
 
+    .warning {
+      display: none;
+      background: rgba(239, 68, 68, 0.12);
+      border: 1px solid rgba(239, 68, 68, 0.35);
+      color: #fecaca;
+      border-radius: 16px;
+      padding: 14px;
+      font-weight: 700;
+      line-height: 1.4;
+      font-size: 14px;
+    }
+
+    .warning.show {
+      display: block;
+    }
+
     .entries {
       display: grid;
       gap: 10px;
@@ -448,6 +464,7 @@
     </header>
 
     <section class="stack">
+      <div class="warning" id="storageWarning">&#9888; Dein Browser blockiert lokalen Speicher f&uuml;r diese Seite. Eintr&auml;ge werden nur angezeigt, solange die Seite ge&ouml;ffnet bleibt, und gehen beim Neuladen/Schlie&szlig;en verloren.</div>
       <div class="reminder" id="reminderBox">Zeit f&uuml;r ein Glas Wasser.</div>
 
       <div class="card">
@@ -609,6 +626,7 @@
     const quickGlassButton = document.getElementById("quickGlassButton");
     const quickBottleButton = document.getElementById("quickBottleButton");
     const toastBox = document.getElementById("toastBox");
+    const storageWarning = document.getElementById("storageWarning");
     const entriesEl = document.getElementById("entries");
     const waterBottleTotalEl = document.getElementById("waterBottleTotal");
     const waterBottleLitersEl = document.getElementById("waterBottleLiters");
@@ -636,6 +654,8 @@
       month: "2-digit",
       year: "numeric"
     });
+
+    storageWarning.classList.toggle("show", !isStorageAvailable());
 
     dateInput.value = toDateValue(new Date());
     dayNameEl.textContent = dateFormatter.format(new Date());
@@ -735,13 +755,21 @@
         glassLiters: settings.glassLiters
       });
 
-      saveEntries();
+      // Anzeige immer aktualisieren, auch wenn das Speichern fehlschlaegt
+      // (z.B. weil der Browser lokalen Speicher fuer diese Seite blockiert) -
+      // sonst wirkt es so, als wuerde der Tap gar nichts tun.
+      const saved = saveEntries();
       hideReminder();
       render();
 
       const drinkLabel = drinkType === "water" ? "Wasser" : "Kaffee";
       const amountLabel = bottles > 0 ? "Flasche" : "Glas";
-      showToast(amountLabel + " " + drinkLabel + " eingetragen");
+
+      if (saved) {
+        showToast(amountLabel + " " + drinkLabel + " eingetragen");
+      } else {
+        showToast("Eingetragen, aber Speichern nicht moeglich");
+      }
     }
 
     let toastTimer = null;
@@ -766,17 +794,18 @@
 
       const waterBottles = sumBottles(waterEntries);
       const waterGlasses = sumGlasses(waterEntries);
+      const coffeeGlasses = sumGlasses(coffeeEntries);
 
       setContainerStat(waterBottleTotalEl, waterBottleLitersEl, waterBottles, sumBottleLiters(waterEntries));
       setContainerStat(waterGlassTotalEl, waterGlassLitersEl, waterGlasses, sumGlassLiters(waterEntries));
       setContainerStat(coffeeBottleTotalEl, coffeeBottleLitersEl, sumBottles(coffeeEntries), sumBottleLiters(coffeeEntries));
-      setContainerStat(coffeeGlassTotalEl, coffeeGlassLitersEl, sumGlasses(coffeeEntries), sumGlassLiters(coffeeEntries));
+      setContainerStat(coffeeGlassTotalEl, coffeeGlassLitersEl, coffeeGlasses, sumGlassLiters(coffeeEntries));
 
-      // Flaschenziel und Glasziel sind zwei komplett getrennte Ziele auf Basis von
-      // Wasser-Anzahlen. Es findet an keiner Stelle eine Umrechnung/Addition zwischen
-      // Flaschen und Glaesern statt.
+      // Flaschenziel und Glasziel bleiben getrennte Ziele (keine Umrechnung/Addition
+      // zwischen Flaschen und Glaesern). Beim Glasziel zaehlen aber Kaffeetassen mit,
+      // weil ein Glas ein Glas ist, egal was drin ist.
       renderGoal(bottleGoalText, bottleProgressBar, waterBottles, settings.bottleGoal);
-      renderGoal(glassGoalText, glassProgressBar, waterGlasses, settings.glassGoal);
+      renderGoal(glassGoalText, glassProgressBar, waterGlasses + coffeeGlasses, settings.glassGoal);
     }
 
     function renderGoal(textEl, barEl, count, goal) {
@@ -958,6 +987,17 @@
       URL.revokeObjectURL(url);
     }
 
+    function isStorageAvailable() {
+      try {
+        const testKey = "__storage_test__";
+        localStorage.setItem(testKey, "1");
+        localStorage.removeItem(testKey);
+        return true;
+      } catch {
+        return false;
+      }
+    }
+
     function loadEntries() {
       try {
         const saved = localStorage.getItem(STORAGE_KEY);
@@ -968,7 +1008,13 @@
     }
 
     function saveEntries() {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
+        return true;
+      } catch (err) {
+        console.error("Konnte Eintraege nicht speichern:", err);
+        return false;
+      }
     }
 
     function loadSettings() {
@@ -982,7 +1028,13 @@
     }
 
     function saveSettings() {
-      localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+      try {
+        localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+        return true;
+      } catch (err) {
+        console.error("Konnte Einstellungen nicht speichern:", err);
+        return false;
+      }
     }
 
     function entryLiters(entry) {
